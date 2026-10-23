@@ -1,0 +1,52 @@
+name: Build Windows EXE
+on:
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get the app files
+        run: |
+          mkdir -p /tmp/x app
+          z=$(ls *.zip 2>/dev/null | head -1 || true)
+          if [ -n "$z" ]; then
+            unzip -q -o "$z" -d /tmp/x
+            p=$(find /tmp/x -name package.json -not -path '*/node_modules/*' | head -1)
+            d=$(dirname "$p")
+          else
+            d=.
+          fi
+          (cd "$d" && tar --exclude=./.git --exclude=./.github --exclude=./app --exclude=./node_modules -cf - .) | tar -xf - -C app
+          ls -A app
+          test -f app/package.json
+          test -f app/build/icon.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-src
+          path: app
+          if-no-files-found: error
+
+  build:
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-src
+          path: app
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: app
+        run: npm install
+      - name: Build the exe
+        working-directory: app
+        run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tally-Windows
+          path: app/dist/*.exe
+          if-no-files-found: error
